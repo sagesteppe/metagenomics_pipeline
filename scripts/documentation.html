@@ -362,6 +362,52 @@ display: none;
 
 </div>
 
+<div id="TOC">
+<ul>
+<li><a href="#installing-ubuntu-on-a-dual-boot-advice" id="toc-installing-ubuntu-on-a-dual-boot-advice">1: Installing Ubuntu on
+a dual boot advice</a></li>
+<li><a href="#check-to-see-if-the-data-transfer-from-the-genomics-core-you-was-clean" id="toc-check-to-see-if-the-data-transfer-from-the-genomics-core-you-was-clean">2:
+Check to see if the data transfer from the genomics core you was
+clean</a></li>
+<li><a href="#install-somestuff" id="toc-install-somestuff">3: Install
+somestuff</a>
+<ul>
+<li><a href="#download-anaconda" id="toc-download-anaconda">Download
+Anaconda</a></li>
+<li><a href="#conda-on" id="toc-conda-on">CONDA ON</a></li>
+<li><a href="#github" id="toc-github">Github</a></li>
+<li><a href="#homebrew" id="toc-homebrew">Homebrew</a></li>
+<li><a href="#create-a-big-bad-bioinformatics-folder" id="toc-create-a-big-bad-bioinformatics-folder">Create a big bad
+bioinformatics folder</a></li>
+<li><a href="#fastqc" id="toc-fastqc">FastQC</a></li>
+<li><a href="#trimmomatic" id="toc-trimmomatic">Trimmomatic</a></li>
+<li><a href="#install-mega353-for-custom-target-files" id="toc-install-mega353-for-custom-target-files">Install Mega353 for
+custom target files</a></li>
+<li><a href="#install-r-and-rstudio" id="toc-install-r-and-rstudio">Install R and Rstudio</a></li>
+</ul></li>
+<li><a href="#process-read-data" id="toc-process-read-data">Process read
+data</a>
+<ul>
+<li><a href="#run-trimmomatic-on-all-data" id="toc-run-trimmomatic-on-all-data">Run trimmomatic on all
+data</a></li>
+<li><a href="#prepare-files-for-mega353" id="toc-prepare-files-for-mega353">Prepare files for Mega353</a></li>
+<li><a href="#run-hyb-piper" id="toc-run-hyb-piper">Run
+Hyb-Piper</a></li>
+</ul></li>
+<li><a href="#build-the-kraken-database" id="toc-build-the-kraken-database">Build the Kraken database</a></li>
+<li><a href="#look-up-and-join-the-ncbi-identifier-after-the-kraken-taxid-code." id="toc-look-up-and-join-the-ncbi-identifier-after-the-kraken-taxid-code.">look
+up and join the NCBI identifier after the kraken taxid code.</a>
+<ul>
+<li><a href="#run-metagenome-samples-through-kraken2" id="toc-run-metagenome-samples-through-kraken2">Run metagenome samples
+through Kraken2</a></li>
+<li><a href="#run-bracken-on-samples-to-try-and-reduce-reads-at-the-level-of-genus" id="toc-run-bracken-on-samples-to-try-and-reduce-reads-at-the-level-of-genus">run
+bracken on samples to try and reduce reads at the level of
+genus</a></li>
+<li><a href="#create-a-local-instance-of-blast" id="toc-create-a-local-instance-of-blast">Create a local instance of
+BLAST</a></li>
+</ul></li>
+</ul>
+</div>
 
 <p>This document is gonna make your eyes burn. And not in a <em>Heaven’s
 Gonna Burn Your Eyes</em> kinda way. Their will be heinous crimes
@@ -668,6 +714,8 @@ curl -k -O -L https://www.rstudio.com/products/rstudio/download/#download&quot; 
 </div>
 <div id="process-read-data" class="section level2">
 <h2>Process read data</h2>
+<div id="run-trimmomatic-on-all-data" class="section level3">
+<h3>Run trimmomatic on all data</h3>
 <pre class="sh"><code>conda activate metagenomics #(if not already)
 
 cd sequenceData
@@ -678,6 +726,814 @@ cp ~/Trimmomatic-0.39/adapters/TruSeq3-PE.fa raw_reads
 
 trimmomatic PE -phred33  1a_S76_L002_R1_001_paired.fastq.gz 1a_S76_L002_R2_001_paired.fastq.gz -baseout ../Trimmed_reads/1a_S76.fastq.gz ILLUMINACLIP:TruSeq3-PE.fa:2:30:10 LEADING:3 SLIDINGWINDOW:5:20 MINLEN:36
 </code></pre>
+</div>
+<div id="prepare-files-for-mega353" class="section level3">
+<h3>Prepare files for Mega353</h3>
+<p>We want to use HybPiper on our reference taxa, i.e. the plant species
+which we hope to identify in our environmental samples which we could
+not find existing sequence data for online and sequenced ourselves. We
+will not put our environmental samples through this pipeline.</p>
+<p>We will need to:</p>
+<pre><code>Identify which reads these are.
+Gather some systematic information on them.
+Create a Mega353 ‘select_file.txt’</code></pre>
+<p>Take a look at what taxa we have reads from real quick, and look at
+what is required to use M353.</p>
+<pre class="sh"><code>
+cd ~/.local/bin/NewTargets
+column -s, -t &lt; filtering_options.csv | less -#2 -N -S 
+cd
+cp filtering_options.csv /media/sagesteppe/Genomics/filtering_options.csv
+    
+cp .local/bin/NewTargets/select_file_example.txt /media/sagesteppe/Genomics/select_file_example_cp.txt # remove later</code></pre>
+<p>type any alphabetical letter like <strong>’q</strong>’ to quit the
+view mode. Regarding M353, for me the easiest option is to try and join
+the taxonomic information regarding my reference sample to either the
+Order or family in this file.</p>
+<p>My notes on my extractions are in an excel spreadsheet. While we can
+use this in Python, lets convert to a CSV.</p>
+<pre class="sh"><code>cd /media/sagesteppe/Genomics
+ls *.xlsx # to check file name
+soffice --headless --convert-to csv Prospective_samples.xlsx
+rm Prospective_samples.xlsx</code></pre>
+<p>in order to gather the taxonomic information for the reference
+samples we can do something as so</p>
+<pre class="r"><code># $ R # this from the command line - it will engage the R language for statistical computing
+install.packages(&quot;taxize&quot;) # note &#39;Y&#39;, &#39;Y&#39; for the two options.
+library(taxize)
+setwd(&quot;/media/sagesteppe/Genomics&quot;)
+f = read.csv(&quot;Prospective_samples.csv&quot;)
+# &gt; head(f)
+f = f[c(&#39;Voucher_specimen&#39;,&#39;Number&#39;,&#39;Sample&#39;, &#39;type&#39;, &#39;vials&#39;)]
+f = subset(f, type == &#39;library&#39;)
+f = f[c(&#39;Number&#39;,&#39;Sample&#39;, &#39;vials&#39;)]
+f$Sample = gsub(&quot;_&quot;, &quot; &quot;, f$Sample)
+# note NCBI subsumes L. bakeri into synonymy with L. sericeus
+f[f == &#39;Lupinus bakeri&#39;] = &#39;Lupinus sericeus&#39;
+f[f == &#39;Erigeron elatior&#39;] = &#39;Erigeron grandiflorus&#39; 
+# similar to above
+taxa = f$Sample
+ENTREZ_KEY = &#39;1dddef4ac326bf8b74fa69ae430411218f09&#39;
+results = classification(taxa, db = &#39;ncbi&#39;)
+    
+family = lapply(results, subset, rank == &quot;family&quot;)
+family = do.call(rbind, family)
+family = cbind(rownames(family), data.frame(family, row.names=NULL))
+family = family[,1:2]
+colnames(family) = c(&#39;Sample&#39;, &#39;Family&#39;)
+
+# repeat for order. 
+
+order = lapply(results, subset, rank == &quot;order&quot;)
+order = do.call(rbind, order)
+order = cbind(rownames(order), data.frame(order, row.names=NULL))
+order = order[,1:2]
+colnames(order) = c(&#39;Sample&#39;, &#39;Order&#39;)
+        # combine
+        
+taxonomy = merge(family, order, on = &quot;Sample&quot;)
+f = merge(f, taxonomy, on = &quot;Sample&quot;)
+f[f == &#39;Lupinus sericeus&#39;] = &#39;Lupinus bakeri&#39;
+f[f == &#39;Erigeron grandiflorus&#39;] = &#39;Erigeron elatior&#39;
+    
+rm(taxonomy, order, family, taxa)
+write.csv(f, &quot;Taxonomy_ref_lib_samples.csv&quot;, row.names = FALSE)
+quit()</code></pre>
+<p>We can write the files to filter the M353 targets as so</p>
+<pre class="py"><code>$ python3
+# you are now in python 
+import os
+import pandas as pd
+import numpy
+
+taxonomy_ref = pd.read_csv(r&#39;/media/sagesteppe/Genomics/Taxonomy_ref_lib_samples.csv&#39;)
+targets = pd.read_csv(r&#39;/media/sagesteppe/Genomics/filtering_options.csv&#39;)
+
+df = taxonomy_ref.merge(targets, on= &#39;Order&#39;, how= &#39;left&#39;).drop(columns=[&#39;Family_y&#39;]).rename(columns={&quot;Family_x&quot;: &quot;Family&quot;})
+    
+df = df.drop_duplicates(subset=[&#39;Target_name&#39;])
+orders = df[&#39;Order&#39;].values.tolist()
+orders = list(sorted(set(orders)))
+    
+df[&#39;Filepath&#39;] = &#39;/media/sagesteppe/Genomics/to_pipe/&#39;
+df[&quot;Filepath&quot;] = df[&quot;Filepath&quot;] + df[&quot;Order&quot;] + &#39;/&#39;
+df[&#39;Filename&#39;] = df[&quot;Order&quot;] + &#39;_filter&#39;
+    
+df = df[[&quot;Family&quot;, &quot;Order&quot;, &quot;Target_name&quot;, &quot;Group&quot;, &quot;Species&quot;, &quot;Filepath&quot;, &#39;Filename&#39;]]
+
+def m353_select(df):
+    &quot;&quot;&quot; Write a text file for use with M353 that include information
+  on phylogenetically appropriate samples for read mapping. Useful for
+  mapping reads from plant species across multiple orders such
+  as in meta-barcoding projects.
+
+  Parameters
+  ---------
+  A single dataframe of all 1kp transcriptomes in M353, with
+  your sample information, and systematic placements (Order- Species) of taxa.
+  
+  order /Order: Taxonomic rank, sensu APG4.
+  fam /Family: Taxonomy rank, sensu APG4.
+  sp /Species: taxon with sequences to map, generally from NCBI.
+  trgt_n /Target_name: M353 target taxa using their codes.
+  fname /File_path: filename of fastq to map.
+  fpath/ Directory: directory from root to folder containing fastqs.
+  
+  A list of each fastq file which needs to go through HybPiper
+  
+  Returns
+  --------
+  A text file like the M353 example.
+  &quot;&quot;&quot;
+    
+    orders = df[&#39;Order&#39;].values.tolist()
+    orders = list(sorted(set(orders)))
+    
+    for x in orders:
+    
+      sub = str(x)
+      df_sub = df[df.Order.eq(sub)]
+    
+      order = df_sub[&#39;Order&#39;].values.tolist()[0]
+      fam = df_sub[&#39;Family&#39;].values.tolist()[0]
+      trgt_n = df_sub[&#39;Target_name&#39;].values.tolist()
+      sp = df_sub[&#39;Species&#39;].values.tolist()
+      Filepath = df_sub[&#39;Filepath&#39;].values.tolist()[0]
+      fname = df_sub[&#39;Filename&#39;].values.tolist()[0]
+      
+      fname: str = Filepath + fname
+      filename = &quot;%s.txt&quot; % fname
+    
+      f = open(filename, &quot;x&quot;)
+      f.write(&quot;[Target_name]\n&quot;)
+    
+      with open(filename, &#39;a&#39;) as f:
+        for item in trgt_n:
+          f.write(&quot;%s\n&quot; % item)
+        
+      f = open(filename, &quot;a&quot;)
+      f.write(&quot;\n[Group]\n \n[Order]\n%s \n\n[Family]\n%s \n\n[Species]\n%s&quot; % (order, fam, sp))
+      f.close()
+    
+m353_select(df) 
+quit()</code></pre>
+<p>We will now move each set of sequence data to a folder associated
+with their Order so that we do not have to make many copies of M353
+fastq. This should have been done sooner, but hopefully allows people to
+have more autonomy to fit there needs.</p>
+<pre class="py"><code>$ python3
+import os
+import pandas as pd
+import shutil
+taxonomy_ref = pd.read_csv(r&#39;/media/sagesteppe/Genomics/Taxonomy_ref_lib_samples.csv&#39;)
+    
+files = os.listdir(&#39;/media/sagesteppe/Genomics/to_trim/Trim_Reads/&#39;)
+files = pd.DataFrame(files, columns = [&#39;File_path&#39;])
+files[&quot;Files&quot;] = files[&quot;File_path&quot;]
+files[&#39;Files&#39;] = (files[&#39;Files&#39;].replace(&#39;.fastq&#39;, &#39;&#39;, regex=True).replace(&#39;_[0-9][P|U]&#39;,&#39;&#39;, regex=True).replace(&#39;_[R][1_2]&#39;,&#39;&#39;, regex=True).replace(&#39;_unpaired&#39;,&#39;&#39;, regex=True).replace(&#39;_paired&#39;,&#39;&#39;, regex=True).replace(&#39;_S[0-9]+&#39;, &#39;&#39;, regex=True).replace(&#39;_&#39;, &#39;&#39;, regex=True).replace(&#39;-&#39;, &#39;&#39;, regex=True))
+mask = ~files[&#39;File_path&#39;].str.contains(&#39;_fastqc&#39;, case=False, na=False) # find fastqc
+files = files[mask] # remove fastqc
+files =  files[files[&#39;Files&#39;].str.contains(&#39;[A-Za-z]&#39;)] # remove non reference library.
+files[&#39;Files&#39;] = files[&#39;Files&#39;].str.lower()
+files = files.merge(taxonomy_ref, left_on = &#39;Files&#39;, right_on = &#39;vials&#39;) 
+
+parent_dir = &quot;/media/sagesteppe/Genomics/to_pipe&quot;
+os.mkdir(parent_dir)
+directory = files[&#39;Order&#39;].values.tolist()
+directory = list(set(directory))
+paths = os.path.join(parent_dir, directory) # list of paths duhr
+    
+for i in directory:
+    npath = os.path.join(parent_dir, i)
+    os.mkdir(npath)   
+
+c_path = &#39;/media/sagesteppe/Genomics/to_trim/Trim_Reads/&#39;
+ord = files[&#39;Order&#39;].values.tolist()
+cu_paths = files[&#39;File_path&#39;].values.tolist()
+current_paths = []
+for i in cu_paths:
+    current_paths.append(os.path.join(c_path, i))
+    
+new_paths = []
+new_paths = [parent_dir + &#39;/&#39; + a + &#39;/&#39; + b for a, b in zip(ord, cu_paths)]
+    
+list(map(shutil.move, current_paths, new_paths)) # pretty sure this is the one.
+    
+quit()</code></pre>
+<p>We can copy the M353 file to each directory as so:</p>
+<pre class="py"><code>$ python3
+import os
+import shutil
+m353_path = (&quot;/home/sagesteppe/.local/bin/NewTargets/mega353.fasta.zip&quot;)  
+dest_path = &#39;/media/sagesteppe/Genomics/to_pipe&#39;
+os.chdir(dest_path)
+directories = next(os.walk(&#39;.&#39;))[1]
+new_paths = []
+new_paths = [dest_path + &#39;/&#39; + a + &#39;/m353.fasta.zip&#39;for a in directories]
+
+for path in new_paths:
+  shutil.copy(m353_path, path)
+quit() # all copied</code></pre>
+<pre class="sh"><code>cd &#39;/media/sagesteppe/Genomics/to_pipe&#39; 
+find . -name &#39;*.zip&#39; -exec sh -c &#39;unzip -d `dirname {}` {}&#39; &#39;;&#39; # extract .zip
+find . -type f -name &#39;*.zip&#39; -delete # delete .zip
+
+# and we can filter it as so… Note I could not make this work programmatically (and did not put in much effort)
+
+cd &#39;/media/sagesteppe/Genomics/to_pipe/Rosales&#39;
+python3 /home/sagesteppe/.local/bin/NewTargets/filter_mega353.py mega353.fasta Rosales_filter.txt
+    
+# if you are done you can remove the original m353.fasta
+    
+cd &#39;/media/sagesteppe/Genomics/to_pipe&#39;
+find . -maxdepth 2 -type f -iname &#39;mega353.fasta&#39; -exec rm -rf {} \;</code></pre>
+</div>
+<div id="run-hyb-piper" class="section level3">
+<h3>Run Hyb-Piper</h3>
+<p>We will unfortunately need to change to each Orders directory to do
+this</p>
+<pre class="sh"><code># first we concatenate the unpaired reads
+for file in *_1_1U*
+do 
+file2=${file//1[P|U]/2U}
+file3=${file//1U/U}
+cat $file $file2 &gt; $file3
+rm $file $file2
+done
+    
+echo python3 ~/HybPiper/reads_first.py -r $file $file2 --unpaired $file3 -b filtered_target_file.fasta --prefix $file4 --bwa &gt;&gt; reads_first.sh
+done
+
+$ chmod u+x bashful_piper2.sh
+    
+cd &#39;/media/sagesteppe/Genomics/to_pipe/Myrtales&#39;
+bash ../bashful_piper.sh
+bash ./reads_first.sh</code></pre>
+</div>
+</div>
+<div id="build-the-kraken-database" class="section level2">
+<h2>Build the Kraken database</h2>
+<p>A very thorough review of how to install Kraken is provided below. <a href="https://github.com/DerrickWood/kraken2/wiki/Manual" class="uri">https://github.com/DerrickWood/kraken2/wiki/Manual</a></p>
+<p>Steps for prepping a novel Kraken database: <a href="https://github.com/DerrickWood/kraken2/blob/master/docs/MANUAL.markdown#custom-databases" class="uri">https://github.com/DerrickWood/kraken2/blob/master/docs/MANUAL.markdown#custom-databases</a></p>
+<p>Let us download the taxonomy which NCBI uses, We have it laying
+around for R, but I do not want to troubleshoot linking it to kraken
+myself. It is also not a very large file. We will also download the
+complete set of Plant Genomes and proteins.</p>
+<pre class="sh"><code>kraken2-build --download-taxonomy --db $pl_mtg
+kraken2-build --download-library plant --db $pl_mtg</code></pre>
+<p>4a.1 prep novel sequence data</p>
+<p>We will now add our novel sequence data to the database. First we
+need to find their NCBI taxid.</p>
+<pre class="r"><code>$ r
+install.packages(&#39;taxize&#39;)
+
+species = read.csv (&#39;/media/sagesteppe/Genomics/Taxonomy_ref_lib_samples.csv&#39;)
+species_list = species_list[,1]
+species_list = unique(species)
+species_ncbi = taxize::classification(species_list, db = &#39;ncbi&#39;)
+results = lapply(species_ncbi, function(x) x[nrow(x),c(3)])
+results = t(rbind(unlist(results)))
+results = cbind(rownames(results), data.frame(results, row.names=NULL))
+names(results) = c(&#39;Sample&#39;,&#39;NCBI_code&#39;)
+
+species = merge(species, results, by = &#39;Sample&#39; )
+# write.csv (&#39;/media/sagesteppe/Genomics/Taxonomy_ref_lib_samples.csv&#39;, append = FALSE)
+rm(species_list, species, results)
+quit()</code></pre>
+<p>Now we append the taxid to the top line of each file before the first
+whitespace.</p>
+<p>sequence16|kraken:taxid|32630 Adapter sequence # example</p>
+<p>cd ~/sequenceData/to_pipe/Rosales_cp</p>
+<p>for i in ./<em>/</em>/*contigs.fasta; do n=<span class="math inline">\((basename -s _contigs.fasta &quot;\)</span>i”)
+n1=<span class="math inline">\((dirname &quot;\)</span>i”) n2=“$(dirname
+<span class="math inline">\(n1)&quot;  n3=&quot;\)</span>(basename <span class="math inline">\(n2)&quot;  n4=&quot;\)</span>n|kraken:taxid|<span class="math inline">\(n3&quot;  sed
+&quot;s/^\(&gt;NODE.*\)/\1-\)</span>n4/” “$i” done &gt; testy.fasta</p>
+</div>
+<div id="look-up-and-join-the-ncbi-identifier-after-the-kraken-taxid-code." class="section level1">
+<h1>look up and join the NCBI identifier after the kraken taxid
+code.</h1>
+<pre class="sh"><code>&gt; R
+library(taxize)
+
+data &lt;- read.csv(&#39;/media/reed/Genomics/Taxonomy_ref_lib_samples.csv&#39;)
+data$Sample &lt;- gsub(&#39;Lupinus bakeri&#39;, &#39;Lupinus sericeus&#39;, data$Sample)
+data$Sample &lt;- gsub(&#39;Erigeron elatior&#39;,&#39;Erigeron grandiflorus&#39;, data$Sample)
+
+species &lt;- unique(data$Sample)
+pc &lt;- get_uid(sci_com = species, key = &#39;1dddef4ac326bf8b74fa69ae430411218f09&#39;)
+ncbi_keys &lt;- cbind(species, pc)
+
+taxid_results &lt;- merge(data, ncbi_keys, by.x = &quot;Sample&quot;, by.y =  &quot;species&quot;,  all.x = TRUE)
+rm(species, pc, ncbi_keys, data)
+
+directory &lt;- &#39;/home/reed/sequenceData/to_pipe/&#39;
+list.dirs.depth.n &lt;- function(p, n) { # @ RolandASC
+  res &lt;- list.dirs(p, recursive = FALSE)
+  if (n &gt; 1) {
+    add &lt;- list.dirs.depth.n(res, n-1)
+    c(res, add)
+  } else {
+    res
+  }
+}
+
+folder_name &lt;- list.dirs.depth.n(p = directory, n = 2)
+folder_name &lt;- sub(&#39;^.*/&#39;, &#39;&#39;, folder_name)
+folder_name &lt;- grep(&quot;_&quot;, folder_name, value = TRUE)
+folder_name &lt;- tolower(folder_name)
+sample_folder_names &lt;- folder_name
+sample_folders &lt;- sub(&#39;_s[0-9]{2}_&#39;, &#39;&#39;, folder_name)
+sample_folders_squished &lt;- gsub(&#39;-|_&#39;, &#39;&#39;, sample_folders)
+
+targets &lt;- data.frame(folder_path = paste0(directory, folder_name), 
+                      sample_folders,
+                      sample_folders_squished, 
+                      sample_folder_names)
+
+rm(sample_folders_squished, folder_name, sample_folder_names, sample_folders, directory, list.dirs.depth.n)
+
+final_results &lt;- merge(taxid_results, targets, 
+                       by.x = &#39;vials&#39;, by.y = &#39;sample_folders_squished&#39;,
+                       all.x = T)
+final_results &lt;- final_results[c(&#39;vials&#39;,&#39;pc&#39;, &#39;sample_folder_names&#39;)]
+#write.csv(final_results, &#39;taxid_lookup_table.csv&#39;, row.names = F)
+final_results_text &lt;- final_results[,c(&#39;sample_folder_names&#39;, &#39;pc&#39;)]
+final_results &lt;- final_results[!duplicated(final_results),]
+final_results_text$sample_folder_names &lt;- gsub(&#39;s&#39;, &#39;S&#39;, final_results_text$sample_folder_names)
+readr::write_delim(final_results_text, file = &quot;taxid_lookup.txt&quot;)
+
+rm(taxid_results, targets, final_results)
+quit()</code></pre>
+<pre class="sh"><code>cd ~/sequenceData/to_pipe
+
+awk &#39;
+NR==FNR {
+    old[NR] = $1
+    gsub(/&amp;/,RS,$2)
+    new[NR] = $2
+    next
+}
+{
+    for (i=1; i in old; i++) {
+        gsub(old[i],new[i])
+    }
+    gsub(RS,&quot;\\&amp;&quot;)
+    print
+}
+&#39; taxid_lookup.txt ./*/testy.fasta
+</code></pre>
+<p>4a.2 supplement database with ToL data</p>
+<p>OK now we will see what we have, and what else we want from Kew.</p>
+<p>While the repository for the ToL sequence data is the European
+Nucleotide Archive, it is much easier to access these data via NCBI SRA.
+It seems easiest to manually navigate to the <a href="https://www.ncbi.nlm.nih.gov/Traces/study/?query_key=10&amp;WebEnv=MCID_61d4719c8f8e1f11220da754&amp;o=acc_s%3Aa">SRA
+RUN Selector</a> and manually download the ‘Total’ ‘Metadata’ csv
+file.</p>
+<p>We can open this file in python and compare it to the target
+geographically filtered material for our study area. We will also focus
+on flowering plants less Poales.</p>
+<p>We will use a table which can look up clades from genera from “<a href="https://www.ncbi.nlm.nih.gov/Traces/study/?query_key=10&amp;WebEnv=MCID_61d4719c8f8e1f11220da754&amp;o=acc_s%3Aa">SRA
+RUN Selector</a>. I hoped to use taxizedb here, but it is unable to
+install on Ubuntu and as Scott left ROpenSci I think it has fell out of
+maintenance.</p>
+<pre class="py"><code>$ python3
+&gt;&gt;&gt; import pandas as pd
+sra_table = pd.read_csv(&quot;/media/sagesteppe/Genomics/data_summaries/SraRunTable.txt&quot;)
+sra_table = sra_table.iloc[:, [0,1,2,12,22,33,34,35,36,37,38,39,40,41]]
+sra_table = sra_table[~(sra_table.Organism == &#39;unidentified&#39;)]
+sra_table = sra_table[~sra_table.Organism.str.contains(&quot; sp\\.&quot;)]
+sra_table[[&#39;Genus&#39;,&#39;Species&#39;]] = sra_table[&#39;Organism&#39;].str.split(&#39; &#39;, 1, expand=True)
+
+lookup = pd.read_csv(&quot;~/Bioinformatics/files/Spermatophyta_Genera.csv&quot;)
+lookup = lookup.iloc[:,[0,1,2]] 
+lookup = lookup.rename(columns={lookup.columns[0]: &quot;Genus&quot;})  
+sra_table = sra_table.merge(lookup, on = &#39;Genus&#39;, how = &#39;left&#39;) 
+
+site_target_taxa = pd.read_csv(&quot;/hdd/MS_SDM_RMBL/SDMS_RMBL/data/processed/taxa_predicted_rmbl.csv&quot;) 
+site_target_taxa[&#39;name&#39;].str.split(&#39;_&#39;, 1, expand=True)
+
+    
+    # alternate route
+df2 = pd.DataFrame(site_target_taxa.name.str.split(pat = &#39;_&#39;).tolist(), columns=&quot;Genus Epithet&quot;.split())
+genera = df[&#39;Genus&#39;].tolist()
+    
+    #original route
+genera = site_target_taxa[&#39;Genus&#39;].tolist()
+genus_filter = sra_table[&#39;Genus&#39;].isin(genera)
+sra_sub = sra_table[genus_filter]
+print(sra_sub.to_string())
+sra_requests = sra_sub.iloc[:,0] 
+sra_requests.to_csv(&quot;~/sequenceData/files/sra_requests_taxonomy.csv&quot;, header=False, index = False) 
+    
+sra_requests_to_scaffold = sra_sub.iloc[:,[0,3,14,15,16,17]]
+sra_requests_to_scaffold.to_csv(&quot;/media/reed/Genomics/kew_tol/Trim_Reads/sra_to_scaffold.csv&quot;, header=False, index = False) 
+quit()</code></pre>
+<p>We will now download a program to make downloading data from SRA
+easier.</p>
+<p><a href="https://github.com/ncbi/sra-tools/wiki/02.-Installing-SRA-Toolkit">SRA
+toolkit</a> is installed via:</p>
+<pre class="sh"><code>$ cd /home/sagesteppe/.local/bin
+$ wget --output-document sratoolkit.tar.gz http://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/current/sratoolkit.current-ubuntu64.tar.gz
+$ tar -vxzf sratoolkit.tar.gz
+$ rm sratoolkit.tar.gz
+$ ls # note your file will have a different name.  but be sure to keep the &#39;&#39;/bin&#39; 
+$ export PATH=$PATH:$PWD/sratoolkit.2.11.2-ubuntu64/bin
+    
+$ cd /home/sagesteppe/.local/bin/sratoolkit.2.11.2-ubuntu64/bin
+$ which ./fastq-dump</code></pre>
+<p>refer to <a href="https://github.com/ncbi/sra-tools/wiki/03.-Quick-Toolkit-Configuration">this
+page</a> for configuration in a bash script</p>
+<p><code>sh $ ./fastq-dump --stdout SRR390728 | head -n 8</code> and
+compare it to the output on the main git page. only exception is you
+will have something after the message they use an example ‘fastq-dump
+–stdout SRR390728 | head -n 8’, which should pop up on linux.</p>
+<p>Quick Toolkit configuration</p>
+<p>Now you can start to configure the SRA toolkit refer to the link
+above for the steps. <code>sh vdb-config -i</code> Once you have the SRA
+toolkit installed you can do the following to ‘prefetch’ the reads. It
+took me about 1.5 hours to get 126 samples on a Friday using
+Northwesterns internet via ethernet running at 900 Mbps/s</p>
+<pre class="sh"><code>./prefetch --option-file ~/sequenceData/sra_requests.csv
+
+# now extract and move the prefetchs
+
+for file in /home/reed/sra_prefetch/sra *.sra
+do
+    ~/.local/sratoolkit.3.0.0-ubuntu64/bin/fasterq-dump /home/reed/sra_prefetch/sra/*.sra  -t /tmp/scratch -e 16 -O /media/reed/Genomics/kew_tol -p
+done
+
+## for the second batch of pre fetchs we have already 
+~/Genomics/kew_tol $ mkdir supplemental_sra
+# and will now copy them to:
+
+for file in /home/reed/sra_prefetch/sra *.sra
+do
+    ~/.local/sratoolkit.3.0.0-ubuntu64/bin/fasterq-dump /home/reed/sra_prefetch/sra/*.sra  -t /tmp/scratch -e 16 -O /media/reed/Genomics/kew_tol/supplemental_sra -p
+done</code></pre>
+<p>Now we will have to trim these sequences.</p>
+<pre class="sh"><code>$ mkdir Trim_Reads
+$ for r1 in *_1*.fastq; do r2=$(echo $r1|sed &#39;s/_1/_2/&#39;); name=$(echo $r1|sed &#39;s/_1.fastq.gz//&#39;|sed &#39;s/Raw_Reads\///&#39;); echo &quot;java -jar ~/Trimmomatic-0.39/trimmomatic-0.39.jar PE $r1 $r2 -baseout Trim_Reads/$name.fastq.gz ILLUMINACLIP:/home/reed/Trimmomatic-0.39/adapters/TruSeq3-PE.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:5:20 MINLEN:30&quot;;done &gt; trim_commands
+$ bash trim_commands</code></pre>
+<p>and as before we will copy them into there own folders to run a m353
+file with hyb piper.</p>
+<pre class="py"><code>$ python3
+import os
+import pandas as pd
+import shutil
+taxonomy_ref = pd.read_csv(r&#39;./Trim_Reads/sra_to_scaffold.csv&#39;, header = None)
+taxonomy_ref.columns = [&#39;sample&#39;,&#39;species&#39;,&#39;genus&#39;,&#39;epithet&#39;, &#39;family&#39;,&#39;order&#39;]
+
+files = os.listdir(&#39;Trim_Reads&#39;) 
+files = pd.DataFrame(files, columns = [&#39;File_path&#39;])
+files[files[&quot;File_path&quot;].str.contains(&quot;gz&quot;)]
+files[&quot;Files&quot;] = files[&quot;File_path&quot;]
+files[&#39;Files&#39;] = (files[&#39;Files&#39;].replace(&#39;_.*&#39;, &#39;&#39;, regex=True))
+files = files.merge(taxonomy_ref, left_on = &#39;Files&#39;, right_on = &#39;sample&#39;) 
+
+parent_dir = &quot;/media/reed/Genomics/kew_tol/to_pipe&quot;
+os.mkdir(parent_dir)
+directory = files[&#39;order&#39;].values.tolist()
+directory = list(set(directory))
+    
+for i in directory:
+    npath = os.path.join(parent_dir, i)
+    os.mkdir(npath)   
+
+c_path = &#39;/media/reed/Genomics/kew_tol/Trim_Reads&#39;
+ord = files[&#39;order&#39;].values.tolist()
+cu_paths = files[&#39;File_path&#39;].values.tolist()
+current_paths = []
+for i in cu_paths:
+    current_paths.append(os.path.join(c_path, i))
+    
+new_paths = []
+new_paths = [parent_dir + &#39;/&#39; + a + &#39;/&#39; + b for a, b in zip(ord, cu_paths)]
+    
+list(map(shutil.move, current_paths, new_paths)) # finally move the files to the order specific folder
+
+quit()</code></pre>
+<p>We can write the files to filter the M353 targets as so</p>
+<pre class="py"><code>$ python3
+import os
+import pandas as pd
+import numpy
+
+taxonomy_ref = pd.read_csv(r&#39;/media/reed/Genomics/kew_tol/Trim_Reads/sra_to_scaffold.csv&#39;)
+taxonomy_ref.columns = [&#39;Sample&#39;,&#39;Species&#39;,&#39;Genus&#39;,&#39;Epithet&#39;, &#39;Family&#39;,&#39;Order&#39;]
+targets = pd.read_csv(r&#39;/media/reed/Genomics/filtering_options.csv&#39;)
+
+df = taxonomy_ref.merge(targets, on= &#39;Order&#39;, how= &#39;left&#39;).drop(columns=[&#39;Family_y&#39;]).rename(columns={&quot;Family_x&quot;: &quot;Family&quot;}).rename(columns={&quot;Species_y&quot;: &quot;Species&quot;})
+    
+df = df.drop_duplicates(subset=[&#39;Target_name&#39;])
+df[&#39;Order&#39;] = df[&#39;Order&#39;].astype(str)
+orders = df[&#39;Order&#39;].values.tolist()
+orders = list(sorted(set(orders)))
+    
+df[&#39;Filepath&#39;] = &#39;/media/reed/Genomics/kew_tol/to_pipe/&#39;
+df[&quot;Filepath&quot;] = df[&quot;Filepath&quot;] + df[&quot;Order&quot;] + &#39;/&#39;
+df[&#39;Filename&#39;] = df[&quot;Order&quot;] + &#39;_filter&#39;
+    
+df = df[[&quot;Family&quot;, &quot;Order&quot;, &quot;Target_name&quot;, &quot;Group&quot;, &quot;Species&quot;, &quot;Filepath&quot;, &#39;Filename&#39;]]
+
+def m353_select(df):
+    &quot;&quot;&quot; Write a text file for use with M353 that include information
+  on phylogenetically appropriate samples for read mapping. Useful for
+  mapping reads from plant species across multiple orders such
+  as in meta-barcoding projects.
+
+  Parameters
+  ---------
+  A single dataframe of all 1kp transcriptomes in M353, with
+  your sample information, and systematic placements (Order- Species) of taxa.
+  
+  order /Order: Taxonomic rank, sensu APG4.
+  fam /Family: Taxonomy rank, sensu APG4.
+  sp /Species: taxon with sequences to map, generally from NCBI.
+  trgt_n /Target_name: M353 target taxa using their codes.
+  fname /File_path: filename of fastq to map.
+  fpath/ Directory: directory from root to folder containing fastqs.
+  
+  A list of each fastq file which needs to go through HybPiper
+  
+  Returns
+  --------
+  A text file like the M353 example.
+  &quot;&quot;&quot;
+    
+    orders = df[&#39;Order&#39;].values.tolist()
+    orders = list(sorted(set(orders)))
+    
+    for x in orders:
+    
+      sub = str(x)
+      df_sub = df[df.Order.eq(sub)]
+    
+      order = df_sub[&#39;Order&#39;].values.tolist()[0]
+      fam = df_sub[&#39;Family&#39;].values.tolist()[0]
+      trgt_n = df_sub[&#39;Target_name&#39;].values.tolist()
+      sp = df_sub[&#39;Species&#39;].values.tolist()
+      Filepath = df_sub[&#39;Filepath&#39;].values.tolist()[0]
+      fname = df_sub[&#39;Filename&#39;].values.tolist()[0]
+      
+      fname: str = Filepath + fname
+      filename = &quot;%s.txt&quot; % fname
+    
+      f = open(filename, &quot;x&quot;)
+      f.write(&quot;[Target_name]\n&quot;)
+    
+      with open(filename, &#39;a&#39;) as f:
+        for item in trgt_n:
+          f.write(&quot;%s\n&quot; % item)
+        
+      f = open(filename, &quot;a&quot;)
+      f.write(&quot;\n[Group]\n \n[Order]\n%s \n\n[Family]\n%s \n\n[Species]\n%s&quot; % (order, fam, sp))
+      f.close()
+    
+m353_select(df)
+quit()</code></pre>
+<p>now we concatenate the unpaired reads</p>
+<p>first we concatenate the unpaired reads in each folder</p>
+<pre class="sh"><code>for file in *_1_1U*
+do 
+file2=${file//1[P|U]/2U}
+file3=${file//1U/U}
+cat $file $file2 &gt; $file3
+rm $file $file2
+done
+
+gunzip ./*/*.gz # unzip all of the reads
+
+for i in `find . -name &quot;.fastq&quot;`; mmv -r &#39;*fastq.*&#39; &#39;#1#2&#39; ; done
+
+rename _1_ _ ./*/*fastq
+rename P _paired ./*/*fastq
+rename U unpaired ./*/*fastq
+rename _1_ _R1_ ./*/*fastq
+rename _2_ _R2_ ./*/*fastq
+
+find -name \*.fastq -printf &quot;%f\n&quot; | sed -e &#39;s/_[P|U]_R[1|2]\.fastq$/  /&#39; | sort -u &gt; namelist.txt</code></pre>
+<p>than create this script in the root of the folder with all of our
+sequences by order</p>
+<pre class="sh"><code>for file in *R1_paired*
+do
+file2=${file//R1/R2}
+file3=${file//R1_paired.fastq/unpaired.fastq}
+file4=${file//R1_paired.fastq/}
+echo python /home/reed/HybPiper/reads_first.py -r $file $file2 --unpaired $file3 -b filtered_target_file.fasta --prefix $file4 --bwa &gt;&gt; reads_first.sh
+done
+
+# and copy it to each folder as so:
+
+for d in */; do cp reads_first.sh &quot;$d&quot;; done
+rm reads_first.sh # to remove the script from the root
+
+# and then run it from each folder
+
+bash reads_first.sh</code></pre>
+<p>Now update the SRA table code with the taxon’s name.</p>
+<pre class="r"><code># look up and join the NCBI identifier after the kraken taxid code. 
+
+&gt; R
+library(taxize)
+
+data &lt;- rbind(read.csv(&#39;/home/reed/sequenceData/sra_requests.csv&#39;, col.names = &#39;SRA&#39;), read.csv(&#39;/home/reed/sequenceData/sra_requests2.csv&#39;, col.names = &#39;SRA&#39;))
+
+sra_run_table &lt;- read.csv(&#39;/home/reed/sequenceData/SraRunTable.txt&#39;)[,c(&#39;Run&#39;, &#39;Organism&#39;)]
+sra_rt1 &lt;- read.csv(&#39;/home/reed/sequenceData/SraRunTable(1).txt&#39;)[,c(&#39;Run&#39;, &#39;Organism&#39;)]
+sra_rt2 &lt;- read.csv(&#39;/home/reed/sequenceData/SraRunTable(2).txt&#39;)[,c(&#39;Run&#39;, &#39;Organism&#39;)]
+sra_run_table &lt;- rbind(sra_run_table, sra_rt1, sra_rt2)
+
+data &lt;- merge(data, sra_run_table, by.x = &#39;SRA&#39;, by.y = &#39;Run&#39;)
+
+species &lt;- unique(data$Organism)
+pc &lt;- get_uid(sci_com = species, key = &#39;1dddef4ac326bf8b74fa69ae430411218f09&#39;)
+ncbi_keys &lt;- cbind(species, pc)
+
+taxid_results &lt;- merge(data, ncbi_keys, by.x = &quot;Organism&quot;, by.y =  &quot;species&quot;,  all.x = TRUE)
+rm(species, pc, ncbi_keys, data)
+
+directory &lt;- &#39;/media/reed/Genomics/kew_tol/to_pipe&#39;
+list.dirs.depth.n &lt;- function(p, n) { # @ RolandASC
+  res &lt;- list.dirs(p, recursive = FALSE)
+  if (n &gt; 1) {
+    add &lt;- list.dirs.depth.n(res, n-1)
+    c(res, add)
+  } else {
+    res
+  }
+}
+
+folder_name &lt;- list.dirs.depth.n(p = directory, n = 2)
+folder_name &lt;- sub(&#39;^.*/&#39;, &#39;&#39;, folder_name)
+folder_name &lt;- grep(&quot;_&quot;, folder_name, value = TRUE)
+folder_name &lt;- tolower(folder_name)
+sample_folder_names &lt;- folder_name
+sample_folders &lt;- sub(&#39;_s[0-9]{2}_&#39;, &#39;&#39;, folder_name)
+sample_folders_squished &lt;- gsub(&#39;-|_&#39;, &#39;&#39;, sample_folders)
+
+targets &lt;- data.frame(folder_path = paste0(directory, &#39;/&#39;, folder_name), 
+                      sample_folders,
+                      sample_folders_squished, 
+                      sample_folder_names)
+
+rm(sample_folders_squished, folder_name, sample_folder_names, sample_folders, directory, list.dirs.depth.n)
+
+taxid_results$SRA &lt;- tolower(taxid_results$SRA)
+final_results &lt;- merge(taxid_results, targets, 
+                       by.x = &#39;SRA&#39;, by.y = &#39;sample_folders_squished&#39;,
+                       all.x = T)
+final_results &lt;- final_results[c(&#39;Organism&#39;, &#39;pc&#39;, &#39;sample_folder_names&#39;)]
+
+final_results_text &lt;- final_results[,c(&#39;sample_folder_names&#39;, &#39;pc&#39;)]
+final_results &lt;- final_results[!duplicated(final_results),]
+final_results_text$sample_folder_names &lt;- toupper(final_results_text$sample_folder_names)
+readr::write_delim(final_results_text, file = &quot;taxid_lookup.txt&quot;)
+
+rm(taxid_results, targets, final_results)
+quit()
+
+# now we use that form to update the lines in each file which contain the SRA run information with the taxid
+
+$ cd ~/sequenceData/to_pipe
+
+awk &#39;
+NR==FNR {
+    old[NR] = $1
+    gsub(/&amp;/,RS,$2)
+    new[NR] = $2
+    next
+}
+{
+    for (i=1; i in old; i++) {
+        gsub(old[i],new[i])
+    }
+    gsub(RS,&quot;\\&amp;&quot;)
+    print
+}
+&#39; taxid_lookup.txt ./*/*_con.fasta &gt;&gt; rmbl_consensus.fasta</code></pre>
+<p>Finally we can build the database now!
+<code>sh kraken2-build --build --db Eastwood --threads 16</code></p>
+<div id="run-metagenome-samples-through-kraken2" class="section level2">
+<h2>Run metagenome samples through Kraken2</h2>
+<pre class="sh"><code># first we will run trimmomatic on these files
+
+find -type f -name &quot;[0-9][0-9]_S[0-9]*_paired.fastq.gz&quot; -exec cp {} ../raw_reads \;
+find -type f -name &quot;[0-9]_S[0-9]*_paired.fastq.gz&quot; -exec cp {} ../raw_reads \;
+
+
+# now run trimomatic
+for R1 in *R1_001*; do
+    R2=${R1//R1_001.fastq.gz/R2_001.fastq.gz}
+    R1paired=${R1//.fastq/_paired.fastq}
+    R1unpaired=${R1//.fastq/_unpaired.fastq}
+    R2paired=${R2//.fastq/_paired.fastq}
+    R2unpaired=${R2//.fastq/_unpaired.fastq}
+    echo java -jar /home/reed/Trimmomatic-0.39/trimmomatic-0.39.jar PE -phred33 $R1 $R2 $R1paired $R1unpaired $R2paired $R2unpaired ILLUMINACLIP:/home/reed/Trimmomatic-0.39/adapters/TruSeq3-PE.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:5:20 MINLEN:30 &gt;&gt; trimmomatic.sh
+done
+
+$ bash trimmmomatic.sh
+
+# this script mucks up the naming of the files, we will copy over the valid files like so. We will only use the Paired forward and reverse reads with trimmomatic
+
+find -type f -name &quot;[0-9]_S[0-9]*001_paired.fastq.gz&quot; -exec cp {} ../trimmed_metagenomic \;
+
+# be sure to repeat with the double [0-9] to get samples with two numbers.
+
+#reduce the file name
+
+mmv -r &#39;*_001_*&#39; &#39;#1_#2&#39;
+mmv -r &#39;*_L002_*&#39; &#39;#1_#2&#39;</code></pre>
+<p>Great now we are ready to unlease the kraken!</p>
+<pre class="sh"><code>for reed1 in *R1_paired*
+do
+reed2=${reed1//R1_paired.fastq.gz/R2_paired.fastq.gz}
+samp_nom=$(basename &quot;$reed1&quot; _R1_paired.fastq.gz)
+kraken2 --db ~/Eastwood --report ~/sequenceData/metagenome_class/${samp_nom_report.txt  --report-minimizer-data --threads 16 --gzip-compressed --paired $reed1 $reed2 --output  ~/sequenceData/metagenome_class/$samp_nom.txt
+done</code></pre>
+</div>
+<div id="run-bracken-on-samples-to-try-and-reduce-reads-at-the-level-of-genus" class="section level2">
+<h2>run bracken on samples to try and reduce reads at the level of
+genus</h2>
+<p>download the zip file of bracken from <a href="https://github.com/jenniferlu717/Bracken" class="uri">https://github.com/jenniferlu717/Bracken</a> andextract to
+your home directory</p>
+<pre class="sh"><code>cd Bracken-master
+bash install_bracken.sh
+bash bracken-build -d ../Eastwood -t 16 -k 35 -l 150
+
+# now run bracken
+
+cd /home/reed/sequenceData/metagenome_class
+
+for classification in *report.txt
+do
+    SAMPLE=${classification//.txt}
+    FNAME=${SAMPLE//_report}
+     ~/Bracken-master/bracken -d ~/Eastwood -i ${SAMPLE}.txt -o ${FNAME}.bracken -r 150 -t 100
+done</code></pre>
+</div>
+<div id="create-a-local-instance-of-blast" class="section level2">
+<h2>Create a local instance of BLAST</h2>
+<pre class="sh"><code># prep the sequences
+cat /media/reed/Genomics/kew_tol/to_pipe/tol_consensus.fasta ~/sequenceData/to_pipe/rmbl_consensus.fasta &gt;&gt; /media/reed/Genomics/rmbl_seqs/all_rmbl_seqs.fasta
+cat all_rmbl_seqs.fasta | seqkit rmdup -n -o clean.fasta
+
+sed -i -e &#39;s/|kraken:taxid|/-/&#39; all_rmbl_seqs.fasta # remove this section
+sed -i -e &#39;s/NODE/n/&#39; all_rmbl_seqs.fasta
+sed -i -e &#39;s/length/l/&#39; all_rmbl_seqs.fasta
+# need to make the IDs shorter
+
+grep &#39;^&gt;&#39; all_rmbl_seqs.fasta &gt; NCBEastwood_tax_map.txt
+sed -i -e &#39;s/-/ /2&#39; NCBEastwood_tax_map.txt
+sed -i -e &#39;s/&gt;//&#39; NCBEastwood_tax_map.txt
+sed -i -e &#39;s/7B_S89_/53216/&#39; NCBEastwood_tax_map.txt # just for us L. bakeri confusion
+
+makeblastdb -in all_rmbl_seqs.fasta -parse_seqids -taxid_map NCBEastwood_tax_map.txt -title &quot;NCBEastwood&quot;  -dbtype nucl
+
+# some node may actually be replicated... we dealt with this as so:
+
+grep -R -i &quot;NODE_551_LENGTH_79_COV_4.000000-5968&quot; . # find it
+sed -i -e &#39;s/NODE_551_length_79_cov_4.000000-5968 2841764/NODE_551_length_79_cov_4.000000-5968 2841764 NODE_551_length_79_cov_4.000000-5968-2841764 2841764/&#39; NCBEastwood_tax_map.txt # update to make one distinct.
+
+sed -i -e &#39;s/n_1_l_755_cov_9.377581-4471-1433329/n_1_l_755_cov_9.377581-4471-1433329a/&#39; NCBEastwood_tax_map.txt # update to make one distinct.
+</code></pre>
+<p>You can then test to ensure that the BLAST database is working, here
+I test it on one sample.</p>
+<pre class="sh"><code>blastn -query ~/sequenceData/trimmed_metagenomic/informative_seqs/3_S117.fasta -db /media/reed/Genomics/rmbl_seqs/all_rmbl_seqs.fasta -out ~/sequenceData/trimmed_metagenomic/informative_seqs/blast_results/3_S117_blast_res.txt
+
+sed -n &#39;/^Query=/,/^&gt;/ { //!p }&#39; test.txt &gt; tables.txt
+
+# we can run this process on many files as so:
+cd ~/sequenceData/trimmed_metagenomic/informative_seqs/
+
+# run blast on all sequences that were used to assign ID&#39;s
+for f in *.fasta; do
+    outfile=&quot;blast_results/${f/.fasta/}_seqs_blasted.txt&quot;
+    blastn -query $f -db /media/reed/Genomics/rmbl_seqs/all_rmbl_seqs.fasta -out $outfile
+    echo &quot;Sample:&quot; ${f/.fasta/} &quot;has been completed.&quot;;
+done
+
+# reformat output data for import to R
+mkdir tables
+mkdir raw_assign
+for f in *blasted.txt; do
+    outfile=&quot;tables/${f/_seqs_blasted.txt/}.txt&quot;
+    sed -n &#39;/^Query=/,/^&gt;/ { //!p }&#39; $f | sed &#39;/^Lambda/,/^Query/d&#39; &gt; $outfile
+    mv $f &quot;raw_assign/${f}&quot; 
+done
+
+
+# Sequences producing significant alignments\
+cd ~/sequenceData/trimmed_metagenomic/informative_seqs/blast_results/tables
+
+for f in *.txt; do
+    outfile=&quot;${f/.txt/}-cleaned.txt&quot;
+    cat $f | sed &#39;s/Sequences producing significant alignments/alignment/&#39; | sed &#39;s/\*\*\*\*\* No hits found \*\*\*\*\*/no_results/&#39; | sed &#39;s/(Bits)//&#39; | sed &#39;s/Score//&#39; | sed &#39;s/E//&#39; | sed &#39;s/Value//&#39; | awk &#39;{ gsub(/[ ]+/,&quot; &quot;); print }&#39; &gt; $outfile
+    rm $f
+done
+</code></pre>
+<p>Now we will pull in the BLAST results to see which loci generated
+most of the Kraken matches.</p>
+</div>
 </div>
 
 
